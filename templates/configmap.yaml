@@ -1,0 +1,147 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tetrate-pre-check-tool.fullname" . }}-scripts
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "tetrate-pre-check-tool.labels" . | nindent 4 }}
+data:
+  run-precheck.sh: |
+    #!/bin/sh
+    set -e
+    
+    echo "==================================="
+    echo "Tetrate Istio Pre-Check Tool"
+    echo "==================================="
+    echo "Started at: $(date)"
+    echo ""
+    
+    # Install required tools
+    echo "Installing required tools..."
+    apk add --no-cache curl kubectl jq > /dev/null 2>&1
+    
+    # Download istioctl
+    echo "Downloading istioctl version ${ISTIOCTL_VERSION}..."
+    curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIOCTL_VERSION} sh - > /dev/null 2>&1
+    cp istio-${ISTIOCTL_VERSION}/bin/istioctl /usr/local/bin/
+    chmod +x /usr/local/bin/istioctl
+    echo "istioctl installed successfully"
+    echo ""
+    
+    # Output file
+    OUTPUT_FILE="/output/tetrate-pre-check-tool.log"
+    
+    # Start logging
+    exec > >(tee -a ${OUTPUT_FILE}) 2>&1
+    
+    echo "==================================="
+    echo "ISTIO VERSION CHECK"
+    echo "==================================="
+    echo "--- Local istioctl version ---"
+    istioctl version || echo "istioctl version command failed"
+    echo ""
+    
+    echo "--- Remote Istio version ---"
+    istioctl version --remote || echo "No remote Istio installation detected or command failed"
+    echo ""
+    
+    echo "==================================="
+    echo "CONTROL PLANE COMPONENTS"
+    echo "==================================="
+    echo "--- Pods in istio-system namespace ---"
+    kubectl get pods -n istio-system || echo "No pods found or namespace doesn't exist"
+    echo ""
+    
+    echo "--- Deployments in istio-system namespace ---"
+    kubectl get deploy -n istio-system || echo "No deployments found or namespace doesn't exist"
+    echo ""
+    
+    echo "--- Services in istio-system namespace ---"
+    kubectl get svc -n istio-system || echo "No services found or namespace doesn't exist"
+    echo ""
+    
+    echo "==================================="
+    echo "ISTIOD REVISIONS AND NAMESPACE LABELS"
+    echo "==================================="
+    echo "--- Istiod deployments with revisions ---"
+    kubectl get deploy -n istio-system -l app=istiod -o custom-columns="NAME:.metadata.name,REVISION:.metadata.labels.istio\.io/rev" 2>/dev/null || echo "No istiod deployments found"
+    echo ""
+    
+    echo "--- Namespace labels for Istio injection ---"
+    kubectl get ns -L istio.io/rev -L istio-injection || echo "Failed to get namespace labels"
+    echo ""
+    
+    echo "==================================="
+    echo "SIDECAR INJECTION VERIFICATION"
+    echo "==================================="
+    echo "--- Pods with istio-proxy sidecar ---"
+    kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}{"\t"}{.metadata.name}{"\t"}{.spec.containers[*].name}{"\n"}{end}' | grep istio-proxy || echo "No pods with istio-proxy found"
+    echo ""
+    
+    echo "==================================="
+    echo "CONTROL PLANE HEALTH VALIDATION"
+    echo "==================================="
+    echo "--- Proxy status ---"
+    istioctl proxy-status || echo "Proxy status command failed or no proxies found"
+    echo ""
+    
+    echo "--- Istio configuration analysis ---"
+    istioctl analyze || echo "Analysis command failed"
+    echo ""
+    
+    echo "--- Validating webhook configurations ---"
+    kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io | grep istio || echo "No Istio validating webhooks found"
+    echo ""
+    
+    echo "--- Mutating webhook configurations ---"
+    kubectl get mutatingwebhookconfigurations.admissionregistration.k8s.io | grep istio || echo "No Istio mutating webhooks found"
+    echo ""
+    
+    echo "==================================="
+    echo "GATEWAY DEPLOYMENTS"
+    echo "==================================="
+    echo "--- Ingress gateway pods ---"
+    kubectl get pods -A -l istio=ingressgateway || echo "No ingress gateway pods found"
+    echo ""
+    
+    echo "--- Ingress gateway services ---"
+    kubectl get svc -A -l istio=ingressgateway || echo "No ingress gateway services found"
+    echo ""
+    
+    echo "==================================="
+    echo "ISTIO CUSTOM RESOURCES"
+    echo "==================================="
+    echo "--- Istio CRDs ---"
+    kubectl get crds | grep istio.io || echo "No Istio CRDs found"
+    echo ""
+    
+    echo "--- Istio custom resources ---"
+    kubectl get virtualservices,destinationrules,gateways,serviceentries,peerauthentications,authorizationpolicies -A || echo "No Istio custom resources found"
+    echo ""
+    
+    echo "==================================="
+    echo "CLUSTER CONTEXT"
+    echo "==================================="
+    echo "--- All namespaces ---"
+    kubectl get ns
+    echo ""
+    
+    echo "--- All pods with 'istio' in name ---"
+    kubectl get pods -A | grep istio || echo "No pods with 'istio' in name found"
+    echo ""
+    
+    echo "--- Istio ConfigMap (first 20 lines) ---"
+    kubectl get cm -n istio-system istio -o yaml 2>/dev/null | head -n 20 || echo "Istio ConfigMap not found"
+    echo ""
+    
+    echo "==================================="
+    echo "Pre-check completed at: $(date)"
+    echo "==================================="
+    echo ""
+    echo "Output saved to: ${OUTPUT_FILE}"
+    echo "Keeping pod alive for log retrieval. Use 'kubectl cp' to download the log file."
+    echo ""
+    
+    # Keep the pod running so logs can be retrieved
+    echo "Pod will remain running. Delete the pod manually when done."
+    tail -f /dev/null

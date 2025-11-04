@@ -1,0 +1,24 @@
+# Default values for tetrate-pre-check-tool
+namespace: istio-system
+
+image:
+  repository: alpine
+  tag: "3.19"
+  pullPolicy: IfNotPresent
+
+# Service account settings
+serviceAccount:
+  create: true
+  name: tetrate-pre-check-tool
+
+# Resource limits
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Istioctl version to download
+istioctlVersion: "1.23.2"
