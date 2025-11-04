@@ -5,37 +5,85 @@ metadata:
   labels:
     {{- include "tetrate-pre-check-tool.labels" . | nindent 4 }}
 rules:
+# Core resources
 - apiGroups: [""]
   resources:
   - pods
+  - pods/log
   - services
   - namespaces
   - configmaps
+  - endpoints
+  - nodes
   verbs: ["get", "list"]
+# Secrets access for istioctl analyze
+- apiGroups: [""]
+  resources:
+  - secrets
+  verbs: ["get", "list"]
+# Port-forward access for istioctl version and proxy-status
+- apiGroups: [""]
+  resources:
+  - pods/portforward
+  verbs: ["get", "list", "create"]
+# ServiceAccount token creation for istioctl proxy-status
+- apiGroups: [""]
+  resources:
+  - serviceaccounts/token
+  verbs: ["create"]
+# Apps resources
 - apiGroups: ["apps"]
   resources:
   - deployments
+  - replicasets
+  - daemonsets
+  - statefulsets
   verbs: ["get", "list"]
+# Admission webhooks
 - apiGroups: ["admissionregistration.k8s.io"]
   resources:
   - validatingwebhookconfigurations
   - mutatingwebhookconfigurations
   verbs: ["get", "list"]
+# CRDs
 - apiGroups: ["apiextensions.k8s.io"]
   resources:
   - customresourcedefinitions
   verbs: ["get", "list"]
+# Istio networking resources
 - apiGroups: ["networking.istio.io"]
   resources:
   - virtualservices
   - destinationrules
   - gateways
   - serviceentries
+  - sidecars
+  - workloadentries
+  - workloadgroups
+  - envoyfilters
+  - proxyconfigs
   verbs: ["get", "list"]
+# Istio security resources
 - apiGroups: ["security.istio.io"]
   resources:
   - peerauthentications
   - authorizationpolicies
+  - requestauthentications
+  verbs: ["get", "list"]
+# Istio telemetry resources
+- apiGroups: ["telemetry.istio.io"]
+  resources:
+  - telemetries
+  verbs: ["get", "list"]
+# Istio extensions
+- apiGroups: ["extensions.istio.io"]
+  resources:
+  - wasmplugins
+  verbs: ["get", "list"]
+# Istio install resources
+- apiGroups: ["install.istio.io"]
+  resources:
+  - istiooperators
   verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

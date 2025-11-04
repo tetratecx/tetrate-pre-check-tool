@@ -38,11 +38,28 @@ data:
     echo "ISTIO VERSION CHECK"
     echo "==================================="
     echo "--- Local istioctl version ---"
-    istioctl version || echo "istioctl version command failed"
+    istioctl version --short --remote=false 2>&1 || {
+      echo "Standard version command failed, trying alternative..."
+      istioctl version --output json 2>&1 | grep -E '(clientVersion|version)' || echo "Unable to determine istioctl version"
+    }
     echo ""
     
     echo "--- Remote Istio version ---"
-    istioctl version --remote || echo "No remote Istio installation detected or command failed"
+    # Try to get version from istiod deployment labels first
+    ISTIOD_VERSION=$(kubectl get deploy -n istio-system -l app=istiod -o jsonpath='{.items[0].metadata.labels.version}' 2>/dev/null)
+    if [ -n "$ISTIOD_VERSION" ]; then
+      echo "Istio version (from istiod deployment): $ISTIOD_VERSION"
+    fi
+    
+    # Try istioctl remote version
+    istioctl version --short --remote=true 2>&1 || {
+      echo "Remote version check via istioctl failed"
+      # Fallback: check istiod image tag
+      ISTIOD_IMAGE=$(kubectl get deploy -n istio-system -l app=istiod -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null)
+      if [ -n "$ISTIOD_IMAGE" ]; then
+        echo "Istiod image: $ISTIOD_IMAGE"
+      fi
+    }
     echo ""
     
     echo "==================================="
@@ -82,11 +99,11 @@ data:
     echo "CONTROL PLANE HEALTH VALIDATION"
     echo "==================================="
     echo "--- Proxy status ---"
-    istioctl proxy-status || echo "Proxy status command failed or no proxies found"
+    istioctl proxy-status 2>&1 || echo "Proxy status command failed or no proxies found"
     echo ""
     
     echo "--- Istio configuration analysis ---"
-    istioctl analyze || echo "Analysis command failed"
+    istioctl analyze -A 2>&1 || echo "Analysis command failed"
     echo ""
     
     echo "--- Validating webhook configurations ---"

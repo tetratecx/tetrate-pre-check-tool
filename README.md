@@ -170,7 +170,16 @@ kubectl describe pod -n istio-system -l app.kubernetes.io/name=tetrate-pre-check
 
 ### Permission errors
 
-Ensure the ServiceAccount has proper RBAC permissions. The chart creates a ClusterRole with read access to necessary resources.
+The chart creates a ClusterRole with comprehensive read access and specific permissions required by `istioctl` commands:
+- Read access to pods, services, deployments, and other core resources
+- Access to secrets (required by `istioctl analyze`)
+- Port-forward permissions (required by `istioctl version --remote` and `istioctl proxy-status`)
+- ServiceAccount token creation (required by `istioctl proxy-status`)
+
+If you see permission errors, verify the ClusterRoleBinding is properly created:
+```bash
+kubectl get clusterrolebinding tetrate-pre-check-tool
+```
 
 ### Cannot download log file
 
