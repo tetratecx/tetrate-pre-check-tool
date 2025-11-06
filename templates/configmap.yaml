@@ -186,8 +186,8 @@ data:
     kubectl get pods -A | grep istio || echo "No pods with 'istio' in name found"
     echo ""
     
-    echo "--- Istio ConfigMap (first 20 lines) ---"
-    kubectl get cm -n istio-system istio -o yaml 2>/dev/null | head -n 20 || echo "Istio ConfigMap not found"
+    echo "--- Istio ConfigMap (full configuration) ---"
+    kubectl get cm -n istio-system istio -o yaml 2>/dev/null || echo "Istio ConfigMap not found"
     echo ""
     
     echo "==================================="
