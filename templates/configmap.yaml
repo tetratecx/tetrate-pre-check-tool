@@ -20,6 +20,10 @@ data:
     echo "Installing required tools..."
     apk add --no-cache curl kubectl jq > /dev/null 2>&1
     
+    # Install Helm (optional, for checking Helm-based installations)
+    echo "Installing Helm..."
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | sh > /dev/null 2>&1 || echo "Helm installation skipped"
+    
     # Download istioctl
     echo "Downloading istioctl version ${ISTIOCTL_VERSION}..."
     curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=${ISTIOCTL_VERSION} sh - > /dev/null 2>&1
@@ -35,6 +39,25 @@ data:
     exec > >(tee -a ${OUTPUT_FILE}) 2>&1
     
     echo "==================================="
+    echo "ISTIO INSTALLATION METHOD CHECK"
+    echo "==================================="
+    echo "--- Check if Istio Operator is installed ---"
+    kubectl get pods -A | grep istio-operator || echo "No Istio Operator pods found"
+    echo ""
+    
+    echo "--- Check if IstioOperator CRD or resources exist ---"
+    kubectl get crd | grep istiooperator || echo "No IstioOperator CRD found"
+    echo ""
+    kubectl get istiooperators.install.istio.io -A 2>&1 || echo "No IstioOperator resources found"
+    echo ""
+    
+    echo "--- Check if Helm was used to install Istio ---"
+    kubectl get all -n istio-system -o yaml 2>/dev/null | grep "helm.sh/chart" || echo "No Helm chart labels found"
+    echo ""
+    helm list -A 2>/dev/null | grep istio || echo "No Istio Helm releases found (helm may not be available in pod)"
+    echo ""
+    
+    echo "==================================="
     echo "ISTIO VERSION CHECK"
     echo "==================================="
     echo "--- Local istioctl version ---"
@@ -44,22 +67,30 @@ data:
     }
     echo ""
     
-    echo "--- Remote Istio version ---"
-    # Try to get version from istiod deployment labels first
-    ISTIOD_VERSION=$(kubectl get deploy -n istio-system -l app=istiod -o jsonpath='{.items[0].metadata.labels.version}' 2>/dev/null)
-    if [ -n "$ISTIOD_VERSION" ]; then
-      echo "Istio version (from istiod deployment): $ISTIOD_VERSION"
-    fi
-    
-    # Try istioctl remote version
-    istioctl version --short --remote=true 2>&1 || {
-      echo "Remote version check via istioctl failed"
-      # Fallback: check istiod image tag
+    echo "--- Remote Istio version (CLI + control plane) ---"
+    istioctl version 2>&1 || {
+      echo "Full version command failed, trying alternatives..."
+      # Try to get version from istiod deployment labels
+      ISTIOD_VERSION=$(kubectl get deploy -n istio-system -l app=istiod -o jsonpath='{.items[0].metadata.labels.version}' 2>/dev/null)
+      if [ -n "$ISTIOD_VERSION" ]; then
+        echo "Istio version (from istiod deployment): $ISTIOD_VERSION"
+      fi
+      
+      # Check istiod image tag
       ISTIOD_IMAGE=$(kubectl get deploy -n istio-system -l app=istiod -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null)
       if [ -n "$ISTIOD_IMAGE" ]; then
         echo "Istiod image: $ISTIOD_IMAGE"
       fi
     }
+    echo ""
+    
+    echo "--- Istiod container image version ---"
+    kubectl get pods -n istio-system -l app=istiod -o jsonpath='{.items[*].spec.containers[*].image}' 2>&1 || echo "Unable to get istiod image"
+    echo ""
+    echo ""
+    
+    echo "--- Dump current Istio profile configuration ---"
+    istioctl profile dump 2>&1 || echo "Profile dump command failed (may require higher permissions)"
     echo ""
     
     echo "==================================="
@@ -86,6 +117,10 @@ data:
     
     echo "--- Namespace labels for Istio injection ---"
     kubectl get ns -L istio.io/rev -L istio-injection || echo "Failed to get namespace labels"
+    echo ""
+    
+    echo "--- Check namespace injection labels (alternative view) ---"
+    kubectl get namespace -L istio-injection 2>&1 || echo "Failed to get namespace injection labels"
     echo ""
     
     echo "==================================="
@@ -117,6 +152,10 @@ data:
     echo "==================================="
     echo "GATEWAY DEPLOYMENTS"
     echo "==================================="
+    echo "--- Ingress/Egress gateway deployments and services ---"
+    kubectl get deploy,svc -n istio-system | grep gateway || echo "No gateway deployments/services found"
+    echo ""
+    
     echo "--- Ingress gateway pods ---"
     kubectl get pods -A -l istio=ingressgateway || echo "No ingress gateway pods found"
     echo ""
