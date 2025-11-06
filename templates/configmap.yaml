@@ -172,7 +172,7 @@ data:
     echo ""
     
     echo "--- Istio custom resources ---"
-    kubectl get virtualservices,destinationrules,gateways,serviceentries,peerauthentications,authorizationpolicies -A || echo "No Istio custom resources found"
+    kubectl get virtualservices,destinationrules,gateways,gw,serviceentries,peerauthentications,authorizationpolicies -A || echo "No Istio custom resources found"
     echo ""
     
     echo "==================================="
